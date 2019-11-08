@@ -1,6 +1,7 @@
 library(svglite)
 library(geojsonio)
 library(sp)
+library(sf)
 library(ggplot2)
 library(mapproj)
 library(broom)
@@ -17,6 +18,19 @@ library(gifski)
 library(png)
 library(data.table)
 library(viridis)
+library(rgdal)
+vignette(package="sp")[4]
+vignette("intro_sp")
+
+## https://nceas.github.io/oss-lessons/spatial-data-gis-law/3-mon-intro-gis-in-r.html
+library(dplyr)
+library(rgdal)
+library(raster)
+library(ggplot2)
+library(rgeos)
+library(mapview)
+library(leaflet)
+library(broom)
 
 ## Up to date regions downloaded as shapefile: https://borders.ukdataservice.ac.uk/easy_download_data.html?data=infuse_uk_2011
 ## Converted to geoJSON using: https://mapshaper.org/
@@ -27,28 +41,47 @@ library(viridis)
 ## spdf = spatial dataframe, EW = England & Wales
 
 ## https://blog.exploratory.io/making-maps-for-uk-countries-and-local-authorities-areas-in-r-b7d222939597
+# set working directory
+download.file("https://borders.ukdataservice.ac.uk/ukborders/easy_download/prebuilt/shape/infuse_uk_2011.zip", 
+              destfile = "infuse_uk_2011.zip" , mode='wb')
 
-spdf_GB <- geojson_read("G:/Tom Webber/Programming/Projects/20190801 UK years to home ownership/infuse_msoa_lyr_2011.json", method = "local", what = "sp")
+
+unzip("infuse_uk_2011.zip", exdir = "./data/")
+file.remove("infuse_uk_2011.zip")
+
+setwd("./data/")
+require(rgdal)
+sp_UK <- readOGR(dsn = ".", layer = "infuse_msoa_lyr_2011")
+sp_UK_simp <- gSimplify(sp_UK,
+                        tol = 10,
+                        topologyPreserve = TRUE)
+
+par(mar=c(0,0,0,0))
+plot(sp_UK_simp, col="#f2f2f2", bg="skyblue", lwd=0.25, border=0 )
+require(broom)
+spdf_UK_simp <- SpatialPolygonsDataFrame(sp_UK_simp,
+                                      sp_UK@data) 
 
 ## For testing, I subsetted a small segment of the data (MSOAs with ID's matching 01xxx or 02xxx)
 # spdf1 <- spdf_EW[ substr(spdf_EW@data$msoa01cd,5,6) %in% c("01", "02") , ]
 
 ## Fortify the data (convert spatial data into a dataframe object) and keep track of the MSOA code (Takes a while for the whole dataset)
 # spdf_fortified_1 <- tidy(spdf1, region = "msoa01cd")
-spdf_fortified <- tidy(spdf_EW, region = "msoa01cd")
-spdf_GB_fort <- tidy(spdf_GB, region = "geo_code")
-to_Match_1 <- c('^[E]*[0-9]','^[W]*[0-9]')
-spdf_EW_fort <- spdf_GB_fort[grep(paste(to_Match_1,collapse="|"), spdf_GB_fort[["id"]]), ]
-## Save an object to a file so I don't have to do that again
-# Desktop
-setwd("G:/Tom Webber/Programming/Projects/20190801 UK years to home ownership")
+spdf_UK_simp = tidy(spdf_UK_simp, region = c("geo_code", "geo_label"))
 
-saveRDS(spdf_EW_fort, file = "spdf_EW_fort.rds")
-saveRDS(spdf_GB_fort, file = "spdf_GB_fort.rds")
+spdf_UK_simp <- merge(x = spdf_UK_simp, y = sp_UK@data[,1:2], by.x = 'id', by.y = 'geo_code')
+
+to_Match_1 <- c('^[E]*[0-9]','^[W]*[0-9]')
+spdf_EW_simp <- spdf_UK_simp[grep(paste(to_Match_1,collapse="|"), spdf_UK_simp[["id"]]), ]
+
+## Save an object to a file in the data folder so I don't have to do that again
+
+saveRDS(spdf_EW_simp, file = "spdf_EW_simp.rds")
+saveRDS(spdf_UK_simp, file = "spdf_UK_simp.rds")
 
 # Restore the object
-spdf_EW_fort <- readRDS(file = "spdf_EW_fort.rds")
-spdf_GB_fort <- readRDS(file = "spdf_GB_fort.rds")
+spdf_EW_simp <- readRDS(file = "spdf_EW_simp.rds")
+spdf_UK_simp <- readRDS(file = "spdf_UK_simp.rds")
 
 # read data
 # House price data found here: https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/medianhousepricebymsoaquarterlyrollingyearhpssadataset02a
